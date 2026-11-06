@@ -241,3 +241,23 @@ def test_build_rich_is_deterministic_enough(_sandbox: Path) -> None:
     a = _inspect(build_rich(_sandbox / "a.xlsx"))
     b = _inspect(build_rich(_sandbox / "b.xlsx"))
     assert [s.n_formulas for s in a.sheets] == [s.n_formulas for s in b.sheets]
+
+
+def test_file_size_limit(rich: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(package, "MAX_FILE_BYTES", 100)
+    with pytest.raises(SheetError, match="refusing to open it"):
+        _inspect(rich)
+
+
+def test_symlink_pointing_outside_is_refused(rich: Path, tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.xlsx"
+    outside.write_bytes(rich.read_bytes())
+    link = tmp_path / "link.xlsx"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("creating symlinks needs privileges on this machine")
+    from sheet_mcp import server
+
+    with pytest.raises(SheetError, match="outside the allowed directory"):
+        server.workbook_overview("link.xlsx")
